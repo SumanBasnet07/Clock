@@ -3,6 +3,44 @@
  * Production-grade entry point managing all modules
  */
 
+const QuoteManager = {
+  quotes: [
+    '“The bad news is time flies. The good news is you’re the pilot.”',
+    '“Focus on being productive instead of busy.”',
+    '“Small habits make a big difference over time.”',
+    '“The future depends on what you do today.”',
+    '“The more you eliminate, the more powerful you become.”'
+  ],
+  getRandom() {
+    return this.quotes[Math.floor(Math.random() * this.quotes.length)];
+  }
+};
+
+function getDashboardGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function refreshDashboardIntro() {
+  const greetingEl = document.getElementById('dashboardGreeting');
+  const summaryEl = document.getElementById('motivationalQuote');
+  const alarmStatusEl = document.getElementById('alarmStatusText');
+  const alarmStatusBadge = document.getElementById('alarmStatusPreview');
+
+  if (greetingEl) greetingEl.textContent = `${getDashboardGreeting()}, welcome back.`;
+  if (summaryEl) summaryEl.textContent = QuoteManager.getRandom();
+
+  const alarm = AppState.smartAlarm;
+  if (alarmStatusEl) {
+    alarmStatusEl.textContent = alarm?.enabled ? `Enabled for ${alarm.time}` : 'Disabled';
+  }
+  if (alarmStatusBadge) {
+    alarmStatusBadge.textContent = alarm?.enabled ? `Alarm set ${alarm.time}` : 'No alarm set';
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   console.log('🚀 TimeOS Initializing...');
 
@@ -21,21 +59,23 @@ document.addEventListener('DOMContentLoaded', () => {
     Notification.requestPermission();
   }
 
-  // Periodic dashboard updates
-  setInterval(() => {
-    FocusTimer.updateStats();
-    TimeCost.updateDashboardCost();
-    SmartAlarm.updateDashboardPreview();
-    Analytics.updateWellSpentRatio();
-  }, 30000); // Update every 30 seconds
-
   // Initial dashboard updates
   setTimeout(() => {
     FocusTimer.updateStats();
     TimeCost.updateDashboardCost();
     SmartAlarm.updateDashboardPreview();
     Analytics.updateWellSpentRatio();
+    refreshDashboardIntro();
   }, 100);
+
+  // Periodic dashboard refreshes
+  setInterval(() => {
+    FocusTimer.updateStats();
+    TimeCost.updateDashboardCost();
+    SmartAlarm.updateDashboardPreview();
+    Analytics.updateWellSpentRatio();
+    refreshDashboardIntro();
+  }, 30000); // Update every 30 seconds
 
   console.log('✅ TimeOS Ready');
 });

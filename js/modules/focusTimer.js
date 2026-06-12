@@ -4,9 +4,10 @@
  */
 
 const FocusTimer = {
-  duration: 25 * 60, // seconds
-  remaining: 25 * 60,
+  duration: 25 * 60 * 1000, // milliseconds
+  remaining: 25 * 60 * 1000,
   interval: null,
+  lastTickTime: null,
   isRunning: false,
   currentMode: 'focus',
 
@@ -73,9 +74,10 @@ const FocusTimer = {
   },
 
   setDuration(seconds) {
-    this.duration = seconds;
-    this.remaining = seconds;
+    this.duration = seconds * 1000;
+    this.remaining = seconds * 1000;
     this.updateDisplay();
+    this.updateProgressRing(1);
   },
 
   applyManualTimer() {
@@ -105,15 +107,17 @@ const FocusTimer = {
   start() {
     if (this.isRunning) return;
     this.isRunning = true;
+    this.lastTickTime = Date.now();
     if (this.display) this.display.classList.add('running');
     const ringContainer = this.progressRing?.closest('.focus-progress-ring');
     if (ringContainer) ringContainer.classList.add('running');
-    this.interval = setInterval(() => this.tick(), 1000);
+    this.interval = setInterval(() => this.tick(), 50);
   },
 
   pause() {
     this.isRunning = false;
     if (this.interval) clearInterval(this.interval);
+    this.interval = null;
     if (this.display) this.display.classList.remove('running');
     const ringContainer = this.progressRing?.closest('.focus-progress-ring');
     if (ringContainer) ringContainer.classList.remove('running');
@@ -127,11 +131,24 @@ const FocusTimer = {
   },
 
   tick() {
+    const now = Date.now();
+    const delta = now - this.lastTickTime;
+    this.lastTickTime = now;
+
     if (this.remaining <= 0) {
       this.complete();
       return;
     }
-    this.remaining--;
+
+    this.remaining -= delta;
+    if (this.remaining <= 0) {
+      this.remaining = 0;
+      this.updateDisplay();
+      this.updateProgressRing(0);
+      this.complete();
+      return;
+    }
+
     this.updateDisplay();
     const progress = this.remaining / this.duration;
     this.updateProgressRing(progress);
@@ -139,7 +156,7 @@ const FocusTimer = {
 
   complete() {
     this.pause();
-    const minutesCompleted = this.duration / 60;
+    const minutesCompleted = this.duration / 60000;
     if (this.currentMode === 'focus') {
       AppState.saveFocusSession({
         duration: minutesCompleted,
@@ -159,9 +176,11 @@ const FocusTimer = {
 
   updateDisplay() {
     if (!this.display) return;
-    const mins = Math.floor(this.remaining / 60);
-    const secs = this.remaining % 60;
-    this.display.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    const totalMs = Math.max(this.remaining, 0);
+    const mins = Math.floor(totalMs / 60000);
+    const secs = Math.floor((totalMs % 60000) / 1000);
+    const ms = Math.floor((totalMs % 1000) / 10);
+    this.display.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
   },
 
   showToast(message) {
@@ -180,24 +199,22 @@ const FocusTimer = {
 
   updateProgressRing(percent) {
     if (!this.progressRing) return;
-    const ring = this.progressRing.querySelector('circle:last-of-type');
-    if (ring) {
-      const circumference = 565.48;
-      const offset = circumference * (1 - percent);
-      ring.style.strokeDashoffset = offset;
-    }
+    const ring = this.progressRing;
+    const circumference = 565.48;
+    const offset = circumference * (1 - percent);
+    ring.style.strokeDashoffset = offset;
   },
 
   updateStats() {
     if (!this.totalTodaySpan || !this.sessionsCompletedSpan) return;
 
     const today = new Date().toDateString();
-    const todayTotal = AppState.focusSessions
-      .filter(s => new Date(s.timestamp).toDateString() === today)
-      .reduce((sum, s) => sum + s.duration, 0);
+    const todaySessions = AppState.focusSessions
+      .filter(s => new Date(s.timestamp).toDateString() === today);
+    const todayTotal = todaySessions.reduce((sum, s) => sum + s.duration, 0);
 
     this.totalTodaySpan.textContent = `${Math.round(todayTotal)} min`;
-    this.sessionsCompletedSpan.textContent = AppState.focusSessions.length;
+    this.sessionsCompletedSpan.textContent = todaySessions.length;
 
     // Update dashboard
     const todayFocusElem = document.getElementById('todayFocus');

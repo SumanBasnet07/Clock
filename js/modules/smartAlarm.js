@@ -39,17 +39,44 @@ const SmartAlarm = {
       cb.addEventListener('change', () => this.calculate());
     });
 
+    this.loadSavedAlarm();
     this.calculate();
   },
 
   getEarliestMeetingTime() {
-    let earliest = 24 * 60; // late default
+    let earliest = null;
     document.querySelectorAll('[data-event]:checked').forEach(cb => {
-      const event = cb.getAttribute('data-event');
-      if (event === 'meeting') earliest = Math.min(earliest, 9 * 60); // 9:00 AM
-      if (event === 'gym') earliest = Math.min(earliest, 8 * 60); // 8:00 AM
+      const start = cb.dataset.start;
+      if (!start) return;
+      const [hour, minute] = start.split(':').map(Number);
+      const totalMinutes = hour * 60 + minute;
+      if (earliest === null || totalMinutes < earliest) {
+        earliest = totalMinutes;
+      }
     });
-    return earliest === 24 * 60 ? null : earliest;
+    return earliest;
+  },
+
+  formatTime(minutes) {
+    const hour = Math.floor(minutes / 60) % 24;
+    const min = minutes % 60;
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour % 12 || 12;
+    return `${displayHour}:${min.toString().padStart(2, '0')} ${ampm}`;
+  },
+
+  loadSavedAlarm() {
+    const alarmPreview = document.getElementById('nextAlarmPreview');
+    const statusText = document.getElementById('alarmStatusText');
+    const savedAlarm = AppState.smartAlarm;
+
+    if (savedAlarm?.time) {
+      if (alarmPreview) alarmPreview.textContent = savedAlarm.enabled ? savedAlarm.time : '--:--';
+      if (statusText) statusText.textContent = savedAlarm.enabled ? `Enabled for ${savedAlarm.time}` : 'Disabled';
+      if (savedAlarm.enabled) {
+        this.scheduleAlarmNotification(savedAlarm.time);
+      }
+    }
   },
 
   calculate() {
@@ -71,9 +98,9 @@ const SmartAlarm = {
       const requiredWake = meetingTime - totalCommute;
       if (requiredWake < baseMinutes) {
         recommendedMinutes = requiredWake;
-        reason = `Meeting at ${Math.floor(meetingTime / 60)}:${(meetingTime % 60).toString().padStart(2, '0')} requires ${totalCommute} min travel.`;
+        reason = `Meeting at ${this.formatTime(meetingTime)} requires ${totalCommute} min travel.`;
       } else {
-        reason = `Meeting later than usual, keeping your preferred time.`;
+        reason = `Meeting starts after your preferred wake time; keeping the requested alarm.`;
       }
     } else {
       reason = `No calendar conflicts. Alarm set as requested.`;
@@ -85,7 +112,7 @@ const SmartAlarm = {
       if (weatherAlert && weatherAlert.severity === 'danger') {
         // Add 15 minutes for severe weather
         recommendedMinutes = Math.max(recommendedMinutes - 15, 4 * 60);
-        reason += ` ⚠️ Severe weather tomorrow - adding 15 min buffer.`;
+        reason += ` ⚠️ Severe weather tomorrow — adding 15 min buffer.`;
       }
     }
 
@@ -94,15 +121,13 @@ const SmartAlarm = {
 
     const recHour = Math.floor(recommendedMinutes / 60);
     const recMin = recommendedMinutes % 60;
-    const ampm = recHour >= 12 ? 'PM' : 'AM';
-    const displayHour = recHour % 12 || 12;
-    const recTimeStr = `${displayHour}:${recMin.toString().padStart(2, '0')} ${ampm}`;
+    const recTimeStr = this.formatTime(recommendedMinutes);
 
     this.recommendedSpan.textContent = recTimeStr;
     this.alarmReason.textContent = reason;
     this.alarmTimeDisplay.textContent = recTimeStr;
 
-    this.lastRecommended = { hour: recHour, minute: recMin };
+    this.lastRecommended = { hour: recHour, minute: recMin, time: recTimeStr };
   },
 
   setAlarm() {
@@ -110,15 +135,43 @@ const SmartAlarm = {
       const timeStr = `${this.lastRecommended.hour.toString().padStart(2, '0')}:${this.lastRecommended.minute.toString().padStart(2, '0')}`;
       AppState.smartAlarm = { time: timeStr, enabled: true };
       Storage.set('smartAlarm', AppState.smartAlarm);
+      this.scheduleAlarmNotification(timeStr);
       alert(`✅ Alarm set for ${this.recommendedSpan.textContent}. Wake up intentionally!`);
       this.updateDashboardPreview();
     }
   },
 
+  scheduleAlarmNotification(timeStr) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    if (!timeStr) return;
+
+    const [hour, minute] = timeStr.split(':').map(Number);
+    const now = new Date();
+    const target = new Date(now);
+    target.setHours(hour, minute, 0, 0);
+    if (target <= now) {
+      target.setDate(target.getDate() + 1);
+    }
+
+    const delay = target - now;
+    if (this.notificationTimeout) clearTimeout(this.notificationTimeout);
+    this.notificationTimeout = setTimeout(() => {
+      new Notification('⏰ Smart Alarm', {
+        body: `Time to wake up: ${this.formatTime(hour * 60 + minute)}`,
+      });
+    }, delay);
+  },
+
   updateDashboardPreview() {
     const alarmPreview = document.getElementById('nextAlarmPreview');
-    if (alarmPreview && AppState.smartAlarm?.time) {
-      alarmPreview.textContent = AppState.smartAlarm.time;
+    const statusText = document.getElementById('alarmStatusText');
+    const alarm = AppState.smartAlarm;
+
+    if (alarmPreview) {
+      alarmPreview.textContent = alarm?.enabled ? alarm.time : '--:--';
+    }
+    if (statusText) {
+      statusText.textContent = alarm?.enabled ? `Enabled for ${alarm.time}` : 'Disabled';
     }
   }
 };

@@ -58,7 +58,7 @@ const Analytics = {
     const maxValue = Math.max(...Object.values(data), 1);
 
     let html = '';
-    Object.entries(data).reverse().forEach(([day, value]) => {
+    Object.entries(data).forEach(([day, value]) => {
       const percentage = (value / maxValue) * 100;
       html += `
         <div style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem; flex: 1;">
@@ -72,15 +72,36 @@ const Analytics = {
     this.weeklyBarsContainer.innerHTML = html;
   },
 
+  getPeakHour() {
+    const hourMap = {};
+    AppState.focusSessions.forEach(session => {
+      const date = new Date(session.timestamp);
+      const hour = date.getHours();
+      hourMap[hour] = (hourMap[hour] || 0) + session.duration;
+    });
+
+    const peakHour = Object.entries(hourMap).sort((a, b) => b[1] - a[1])[0];
+    if (!peakHour) return '--:--';
+    const hour = parseInt(peakHour[0], 10);
+    const display = hour % 12 || 12;
+    const period = hour >= 12 ? 'PM' : 'AM';
+    return `${display} ${period}`;
+  },
+
   updateAnalytics() {
     // Update weekly bars
     this.renderWeeklyBars();
 
     // Update lifetime cost
-    if (this.lifetimeCostSpan && AppState.purchases.length) {
+    if (this.lifetimeCostSpan) {
       const lifetimeTotal = AppState.purchases
         .reduce((sum, p) => sum + (parseFloat(p.hours) * AppState.hourlyRate), 0);
       this.lifetimeCostSpan.textContent = `$${Math.round(lifetimeTotal)}`;
+    }
+
+    // Update peak hour insight
+    if (this.peakHourSpan) {
+      this.peakHourSpan.textContent = this.getPeakHour();
     }
 
     // Update "well spent" ratio

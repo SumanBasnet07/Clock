@@ -22,6 +22,9 @@ const Weather = {
       CONFIG.WEATHER_API_KEY === '__WEATHER_API_KEY__'
     ) {
       console.warn('⚠️ Weather API not configured');
+      this.apiKey = null;
+      this.renderUnavailable('Weather features are disabled until the API key is configured.');
+      this.setupWeatherView();
       return;
     }
 
@@ -67,31 +70,43 @@ const Weather = {
     const searchBtn = document.getElementById('searchWeatherBtn');
     const locationInput = document.getElementById('weatherLocationInput');
 
-    if (searchBtn) {
-      searchBtn.addEventListener('click', () => {
+    if (!searchBtn || !locationInput) return;
+
+    if (!this.apiKey) {
+      locationInput.disabled = true;
+      searchBtn.disabled = true;
+      searchBtn.textContent = 'Weather Unavailable';
+      return;
+    }
+
+    searchBtn.addEventListener('click', () => {
+      const location = locationInput.value.trim();
+      if (location) {
+        this.setLocation(location);
+        locationInput.value = '';
+      }
+    });
+
+    locationInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
         const location = locationInput.value.trim();
         if (location) {
           this.setLocation(location);
           locationInput.value = '';
         }
-      });
-
-      locationInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-          const location = locationInput.value.trim();
-          if (location) {
-            this.setLocation(location);
-            locationInput.value = '';
-          }
-        }
-      });
-    }
+      }
+    });
   },
 
   /**
    * Set location and fetch weather
    */
   async setLocation(location) {
+    if (!this.apiKey) {
+      alert('Weather search is unavailable without an API key.');
+      return false;
+    }
+
     try {
       Storage.set('weatherLocation', location);
       await this.fetchCurrentWeather(location);
@@ -333,7 +348,10 @@ const Weather = {
    * Render weather view with forecast
    */
   renderWeatherView() {
-    if (!this.currentWeather || !this.currentForecast) return;
+    if (!this.currentWeather || !this.currentForecast) {
+      this.renderUnavailable('Weather data is unavailable. Please configure your API key or try again later.');
+      return;
+    }
 
     const current = this.currentWeather.current;
     const location = this.currentWeather.location;
@@ -402,6 +420,25 @@ const Weather = {
         `;
       }).join('');
     }
+  },
+
+  renderUnavailable(message) {
+    const weatherDisplay = document.getElementById('weatherDisplay');
+    const currentDisplay = document.getElementById('currentWeatherDisplay');
+    const forecastDisplay = document.getElementById('forecastDisplay');
+    const weatherAlertEl = document.getElementById('weatherAlert');
+
+    const fallbackHtml = `
+      <div style="text-align:center; padding:1.5rem; color: var(--text-muted);">
+        <div style="font-size: 2.2rem; margin-bottom: 1rem;">🌧️</div>
+        <div>${message}</div>
+      </div>
+    `;
+
+    if (weatherDisplay) weatherDisplay.innerHTML = fallbackHtml;
+    if (currentDisplay) currentDisplay.innerHTML = fallbackHtml;
+    if (forecastDisplay) forecastDisplay.innerHTML = `<div style="text-align:center; color: var(--text-muted);">Forecast unavailable.</div>`;
+    if (weatherAlertEl) weatherAlertEl.innerHTML = '';
   },
 
   /**

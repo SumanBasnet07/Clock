@@ -60,7 +60,7 @@ const TimeCost = {
     const purchase = {
       item: `$${cost.toFixed(2)} purchase`,
       hours: hours.toFixed(1),
-      timestamp: new Date().toLocaleTimeString()
+      timestamp: new Date().toISOString()
     };
     AppState.addPurchase(purchase);
     this.renderHistory();
@@ -77,22 +77,22 @@ const TimeCost = {
     }
 
     this.historyList.innerHTML = AppState.purchases
-      .map(p => `<li>${p.timestamp} — ${p.item} = <strong>${p.hours} hours</strong> of life</li>`)
+      .map(p => {
+        const labelTime = new Date(p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return `<li>${labelTime} — ${p.item} = <strong>${p.hours} hours</strong> of life</li>`;
+      })
       .join('');
   },
 
   updateDashboardCost() {
     const todayCostSpan = document.getElementById('todayCost');
-    if (todayCostSpan && AppState.purchases.length) {
-      const today = new Date().toLocaleDateString();
-      let todayTotal = 0;
+    if (!todayCostSpan) return;
 
-      // Estimate today's cost (purchases from this view session)
-      AppState.purchases.forEach(p => {
-        todayTotal += parseFloat(p.hours) * AppState.hourlyRate;
-      });
+    const today = new Date().toLocaleDateString();
+    const todayTotal = AppState.purchases
+      .filter(p => new Date(p.timestamp).toLocaleDateString() === today)
+      .reduce((sum, p) => sum + parseFloat(p.hours) * AppState.hourlyRate, 0);
 
-      todayCostSpan.textContent = `$${Math.round(todayTotal)}`;
-    }
+    todayCostSpan.textContent = `$${Math.round(todayTotal)}`;
   }
 };
